@@ -2,12 +2,13 @@ import telebot
 from duckduckgo_search import DDGS
 import time
 import requests
+import re
 
 # Token doğrudan koda gömülü
 TOKEN = "7909095380:AAF7pjBKgXU6Irm7ohCEmwHW_UrBEnUaPGA"
 bot = telebot.TeleBot(TOKEN)
 
-# Canlı kontrol mekanizması için platform listesi
+# Canlı kontrol mekanizması platformları
 SOCIAL_PLATFORMS = {
     "Instagram": {"url": "https://www.instagram.com/{}", "mega": True},
     "TikTok": {"url": "https://www.tiktok.com/@{}", "mega": True},
@@ -21,68 +22,49 @@ SOCIAL_PLATFORMS = {
     "Telegram": {"url": "https://t.me/{}", "mega": True}
 }
 
-def generate_advanced_name_queries(name_input):
+def detect_input_type(user_input):
     """
-    Girilen ad, ikinci ad ve soyad kombinasyonlarını 
-    gelişmiş arama dorklarına dönüştürür.
+    Gelişmiş OSINT araçlarında kullanılan girdi tanımlama motoru.
     """
-    parts = name_input.split()
-    queries = []
+    user_input = user_input.strip()
     
-    if len(parts) >= 2:
-        full_name = " ".join(parts)
-        first_and_last = f"{parts[0]} {parts[-1]}"
+    # E-Posta Kontrolü
+    if re.match(r"[^@]+@[^@]+\.[^@]+", user_input):
+        return "mail"
+    
+    # IP Adresi Kontrolü
+    if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", user_input):
+        return "ip"
+    
+    # Telefon Numarası Kontrolü (Boşlukları ve karakterleri temizleyerek)
+    clean_phone = re.sub(r"[\s\+\-\(\)]", "", user_input)
+    if clean_phone.isdigit() and len(clean_phone) >= 9:
+        return "phone"
         
-        # Temel İsim Kombinasyonları
-        queries.append(f'"{full_name}"')
-        if first_and_last != full_name:
-            queries.append(f'"{first_and_last}"')
-            
-        # Sızıntı ve Veritabanı Kombinasyonları
-        queries.append(f'"{full_name}" leak OR breach')
-        queries.append(f'"{full_name}" database OR sql OR db')
-        queries.append(f'"{full_name}" pastebin OR dump')
-        queries.append(f'"{full_name}" t.me OR telegram')
-        queries.append(f'"{full_name}" tc OR kimlik OR mernis')
-        queries.append(f'"{full_name}" gsm OR adres OR telefon')
-    else:
-        # Tek kelime girildiyse standart dorking
-        queries.append(f'"{name_input}"')
-        queries.append(f'"{name_input}" leak')
-        queries.append(f'"{name_input}" database')
-        
-    return queries
+    # Eğer yukarıdakilerden biri değilse Ad Soyad veya Kullanıcı Adıdır
+    return "identity"
+
+def clean_phone_number(phone_input):
+    """Telefon numaralarını dorking için optimize eder."""
+    return re.sub(r"[\s\+\-\(\)]", "", phone_input)
 
 def check_live_accounts(username):
-    """
-    Kullanıcı adını platformlarda canlı sorgular ve sadece aktif olanları döner.
-    """
     found_accounts = []
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
-    
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     for platform, info in SOCIAL_PLATFORMS.items():
         url = info["url"].format(username)
         try:
-            response = requests.get(url, headers=headers, timeout=3)
+            response = requests.get(url, headers=headers, timeout=2)
             if response.status_code == 200 and username.lower() in response.text.lower():
-                found_accounts.append({
-                    "platform": platform,
-                    "link": url,
-                    "mega": info["mega"]
-                })
+                found_accounts.append({"platform": platform, "link": url, "mega": info["mega"]})
         except Exception:
             pass
     return found_accounts
 
-def global_intelligence_dorking(dork_queries):
-    """
-    Belirlenen tüm dork kombinasyonları üzerinden internet üzerinde derin tarama yapar.
-    """
+def global_intelligence_dorking(query_list):
     results = []
     with DDGS() as ddgs:
-        for q in dork_queries:
+        for q in query_list:
             try:
                 search_results = ddgs.text(q, max_results=2)
                 if search_results:
@@ -98,135 +80,99 @@ def global_intelligence_dorking(dork_queries):
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     welcome_text = (
-        "ℹ️ *SİBER İSTİHBARAT VE OSINT SORGU SİSTEMİ*\n\n"
-        "Bu servis, açık kaynak istihbaratı (OSINT) yöntemlerini kullanarak dijital varlıkları ve sızıntı kayıtlarını analiz eder.\n\n"
-        "*Kullanılabilir Komutlar:*\n"
-        "▪️ `/whois [Ad İkinciAd Soyad]` -> Gelişmiş isim kombinasyonlu web ve sızıntı taraması.\n"
-        "▪️ `/username [Kullanıcı Adı]` -> Sosyal medya ve oyun platformlarında canlı varlık sorgulaması.\n"
-        "▪️ `/phone [Telefon Numarası]` -> Numara odaklı global veri sızıntısı analizi.\n"
-        "▪️ `/mail [E-Posta Adresi]` -> Combo listeleri ve sızdırılmış şifre kayıtları kontrolü.\n"
-        "▪️ `/tc [Kimlik / Ad Soyad]` -> Türkiye yerel veri ağları ve log dork denetimi."
+        "ℹ️ *OTOMATİK TEHDİT İSTİHBARATI VE OSINT SİSTEMİ*\n\n"
+        "Bu bot yapay zeka tabanlı girdi tanımlama motoruna sahiptir. Herhangi bir komut kullanmanıza gerek yoktur.\n\n"
+        "👉 Bota doğrudan bir *E-posta*, *Telefon Numarası*, *IP Adresi* veya *Ad-Soyad* göndermeniz yeterlidir. Sistem girdi türünü otomatik tespit ederek derin tarama başlatır."
     )
     bot.reply_to(message, welcome_text, parse_mode='Markdown')
 
-@bot.message_handler(commands=['whois'])
-def check_whois(message):
-    args = message.text.split(maxsplit=1)
-    if len(args) < 2:
-        bot.reply_to(message, "Anlamlı bir sorgu için lütfen ad ve soyad giriniz.\nÖrnek: `/whois Ahmet Selim Yılmaz`", parse_mode='Markdown')
-        return
+@bot.message_handler(func=lambda message: True)
+def handle_auto_osint(message):
+    user_input = message.text.strip()
+    input_type = detect_input_type(user_input)
     
-    target_name = args[1].strip()
-    status_msg = bot.reply_to(message, f"Sorgulanıyor: `{target_name}`\nTüm ad ve soyad kombinasyonları için dork havuzu oluşturuluyor...", parse_mode='Markdown')
+    status_msg = bot.reply_to(message, f"⚙️ Girdi Türü Tespit Edildi: *{input_type.upper()}*\nAnaliz ve dorking süreci başlatıldı, lütfen bekleyiniz...", parse_mode='Markdown')
     
-    # Tüm ad/soyad varyasyonlarını türet ve ara
-    queries = generate_advanced_name_queries(target_name)
-    dork_results = global_intelligence_dorking(queries)
+    queries = []
+    live_profiles = []
+    risk_score = 10 # Temel risk puanı
     
-    response = f"📋 *İSİM VE KİMLİK ANALİZ RAPORU*\n`Hedef: {target_name}`\n"
+    # 1. AŞAMA: Girdi Türüne Göre Akıllı İşlem Dallanması
+    if input_type == "mail":
+        queries = [f'"{user_input}"', f'"{user_input}" leak OR breach', f'"{user_input}" database OR credential', f'"{user_input}" pastebin OR dump']
+        
+    elif input_type == "phone":
+        clean_num = clean_phone_number(user_input)
+        queries = [f'"{clean_num}"', f'"{user_input}" leak', f'"{clean_num}" database OR sql', f'"{clean_num}" pastebin']
+        
+    elif input_type == "ip":
+        # IP için canlı API taraması
+        try:
+            ip_data = requests.get(f"http://ip-api.com/json/{user_input}").json()
+        except Exception:
+            ip_data = None
+            
+    elif input_type == "identity":
+        # Ad soyad ise varyasyonları türet, kullanıcı adı ise sosyal medyayı tara
+        parts = user_input.split()
+        if len(parts) >= 2:
+            queries = [f'"{user_input}"', f'"{parts[0]} {parts[-1]}"', f'"{user_input}" leak OR mernis', f'"{user_input}" database OR tc']
+        else:
+            queries = [f'"{user_input}"', f'"{user_input}" leak', f'"{user_input}" password']
+            live_profiles = check_live_accounts(user_input)
+
+    # 2. AŞAMA: Global Dorking Arama Motoru Entegrasyonu (IP Hariç)
+    dork_results = global_intelligence_dorking(queries) if input_type != "ip" else []
+    
+    # 3. AŞAMA: Tehdit Skoru Hesaplama Matrisi
+    if dork_results:
+        risk_score += len(dork_results) * 12
+    if live_profiles:
+        risk_score += len(live_profiles) * 8
+    if risk_score > 100: risk_score = 100
+    
+    # 4. AŞAMA: Kurumsal Rapor Biçimlendirme
+    response = f"📋 *SİBER İSTİHBARAT SORGULAMA RAPORU*\n"
+    response += f"▪️ *Sorgulanan Veri:* `{user_input}`\n"
+    response += f"▪️ *Analiz Tipi:* {input_type.upper()}\n"
+    response += f"▪️ *Tehdit Seviyesi Skoru:* %{risk_score}\n"
     response += "═" * 30 + "\n\n"
     
-    if dork_results:
-        response += "*AÇIK KAYNAK VE SIZINTI VERİTABANI EŞLEŞMELERİ:*\n\n"
-        for item in dork_results[:10]:
-            if item['mega']:
-                response += f"⚠️ *[YÜKSEK ÖNCELİKLİ BULGU]*\n🔹 *Kaynak:* {item['title']}\n🌐 *Bağlantı:* {item['link']}\n\n"
-            else:
-                response += f"🔹 *Kaynak:* {item['title']}\n🌐 *Bağlantı:* {item['link']}\n\n"
-    else:
-        response += "✓ Açık veri tabanlarında ve sızıntı dökümanlarında bu isim kombinasyonuna ait doğrudan bir eşleşme bulunamadı.\n\n"
+    # IP Sonuç Çıktısı
+    if input_type == "ip" and ip_data and ip_data.get('status') == 'success':
+        response += "*COĞRAFİ VE ISP VERİLERİ:*\n"
+        response += f"🔹 *Lokasyon:* {ip_data.get('country')} / {ip_data.get('city')}\n"
+        response += f"🔹 *Sağlayıcı (ISP):* {ip_data.get('isp')}\n"
+        response += f"🔹 *Koordinat:* {ip_data.get('lat')}, {ip_data.get('lon')}\n\n"
+    
+    # Canlı Profil Sonuç Çıktısı
+    if live_profiles:
+        response += "*DOĞRULANMIŞ AKTİF PROFİLLER:*\n"
+        for acc in live_profiles:
+            tag = "⚠️ [ANA PLATFORM] " if acc['mega'] else "🔹 "
+            response += f"{tag}*{acc['platform']}:* {acc['link']}\n"
+        response += "\n"
         
-    response += "═" * 30 + "\n"
-    response += "*RİSK VE OLASILIK ANALİZİ:*\n"
-    response += "▪ Giriş yapılan isim kombinasyonunun eski mERNIS veya yerel kurum sızıntılarında yer alma ihtimali taranmıştır.\n"
-    response += "▪ Bu ad soyadı taşıyan şahsın geçmişte kayıt olduğu forumlar ve dijital platformlar üzerinde veri sızıntısı riski bulunmaktadır."
-    
-    bot.edit_message_text(response, chat_id=message.chat.id, message_id=status_msg.message_id, parse_mode='Markdown', disable_web_page_preview=True)
-
-@bot.message_handler(commands=['username'])
-def check_username(message):
-    args = message.text.split(maxsplit=1)
-    if len(args) < 2:
-        bot.reply_to(message, "Lütfen bir kullanıcı adı belirtiniz.", parse_mode='Markdown')
-        return
-    
-    target = args[1].strip()
-    status_msg = bot.reply_to(message, f"Sorgulanıyor: `{target}`\nPlatformlar canlı olarak denetleniyor...", parse_mode='Markdown')
-    
-    live_results = check_live_accounts(target)
-    dork_results = global_intelligence_dorking([f'"{target}"', f'"{target}" leak', f'"{target}" password'])
-    
-    response = f"📋 *KULLANICI ADI ANALİZ RAPORU*\n`Hedef: {target}`\n"
-    response += "═" * 30 + "\n\n"
-    
-    if live_results:
-        response += "*DURUMU DOĞRULANAN AKTİF HESAPLAR:*\n\n"
-        for acc in live_results:
-            if acc['mega']:
-                response += f"⚠️ *[ANA PLATFORM]*\n🔹 *{acc['platform']}:* {acc['link']}\n\n"
-            else:
-                response += f"🔹 *{acc['platform']}:* {acc['link']}\n\n"
-    else:
-        response += "✓ Popüler sosyal ağlar üzerinde bu kullanıcı adına ait aktif bir profile rastlanmadı.\n\n"
-        
-    response += "═" * 30 + "\n"
-    
+    # Dorking Sızıntı Sonuç Çıktısı
     if dork_results:
-        response += "*DİJİTAL AYAK İZİ VE LOG KAYITLARI:*\n\n"
-        for item in dork_results[:6]:
-            if item['mega']:
-                response += f"⚠️ *[ANA PLATFORM İLİŞKİSİ]*\n🔹 *Kaynak:* {item['title']}\n🌐 *Bağlantı:* {item['link']}\n\n"
-            else:
-                response += f"🔹 *Kaynak:* {item['title']}\n🌐 *Bağlantı:* {item['link']}\n\n"
-                
+        response += "*TESPİT EDİLEN VERİTABANI VE İLLEGAL KAYNAKLAR:*\n\n"
+        for item in dork_results[:8]:
+            tag = "⚠️ [YÜKSEK ÖNCELİKLİ BULGU] " if item['mega'] else "🔹 "
+            response += f"{tag}*Kaynak:* {item['title']}\n🌐 *Bağlantı:* {item['link']}\n\n"
+    else:
+        if input_type != "ip":
+            response += "✓ İnternet arşivlerinde ve herkese açık sızıntı listelerinde doğrudan bir eşleşme bulunamadı.\n\n"
+            
+    response += "═" * 30 + "\n"
+    response += "*ŞUNLAR ŞUNLAR OLABİLİR (STRATEJİK TAHMİN):*\n"
+    if risk_score > 50:
+        response += "▪️ Verinin yeraltı forumlarında ticari combo listelerine dönüştürülmüş olma ihtimali yüksektir.\n"
+        response += "▪️ Bu dijital kimlik varlığı üzerinden hedef şahsa yönelik hedefli oltalama senaryoları üretilebilir."
+    else:
+        response += "▪️ Dijital ayak izi düşük veya temizlenmiş bir veri setidir.\n"
+        response += "▪️ Açık kaynaklar üzerinden derinlemesine sosyal mühendislik yapılması zordur."
+
     bot.edit_message_text(response, chat_id=message.chat.id, message_id=status_msg.message_id, parse_mode='Markdown', disable_web_page_preview=True)
 
-# Altyapının devamlılığı için sadeleştirilmiş diğer komutlar
-@bot.message_handler(commands=['phone'])
-def check_phone(message):
-    args = message.text.split(maxsplit=1)
-    if len(args) < 2: return
-    target = args[1].strip()
-    status_msg = bot.reply_to(message, f"Sorgulanıyor: `{target}`", parse_mode='Markdown')
-    data = global_intelligence_dorking([f'"{target}"', f'"{target}" leak', f'"{target}" database'])
-    response = f"📋 *TELEFON SIZINTI RAPORU*\n\n"
-    if data:
-        for item in data[:5]:
-            prefix = "⚠️ [YÜKSEK ÖNCELİK] " if item['mega'] else "🔹 "
-            response += f"{prefix}{item['title']}\n🌐 Bağlantı: {item['link']}\n\n"
-    else: response += "✓ Kayıt bulunamadı."
-    bot.edit_message_text(response, chat_id=message.chat.id, message_id=status_msg.message_id, parse_mode='Markdown', disable_web_page_preview=True)
-
-@bot.message_handler(commands=['mail'])
-def check_mail(message):
-    args = message.text.split(maxsplit=1)
-    if len(args) < 2: return
-    target = args[1].strip()
-    status_msg = bot.reply_to(message, f"Sorgulanıyor: `{target}`", parse_mode='Markdown')
-    data = global_intelligence_dorking([f'"{target}"', f'"{target}" leak', f'"{target}" credential'])
-    response = f"📋 *E-POSTA İSTİHBARAT RAPORU*\n\n"
-    if data:
-        for item in data[:5]:
-            prefix = "⚠️ [YÜKSEK ÖNCELİK] " if item['mega'] else "🔹 "
-            response += f"{prefix}{item['title']}\n🌐 Bağlantı: {item['link']}\n\n"
-    else: response += "✓ Kayıt bulunamadı."
-    bot.edit_message_text(response, chat_id=message.chat.id, message_id=status_msg.message_id, parse_mode='Markdown', disable_web_page_preview=True)
-
-@bot.message_handler(commands=['tc'])
-def check_tc(message):
-    args = message.text.split(maxsplit=1)
-    if len(args) < 2: return
-    target = args[1].strip()
-    status_msg = bot.reply_to(message, f"Sorgulanıyor: `{target}`", parse_mode='Markdown')
-    queries = generate_advanced_name_queries(target)
-    data = global_intelligence_dorking(queries)
-    response = f"📋 *YEREL VERİ TABANI RAPORU*\n\n"
-    if data:
-        for item in data[:5]:
-            prefix = "⚠️ [YÜKSEK ÖNCELİK] " if item['mega'] else "🔹 "
-            response += f"{prefix}{item['title']}\n🌐 Bağlantı: {item['link']}\n\n"
-    else: response += "✓ Kayıt bulunamadı."
-    bot.edit_message_text(response, chat_id=message.chat.id, message_id=status_msg.message_id, parse_mode='Markdown', disable_web_page_preview=True)
-
-print("Kurumsal OSINT Sistemi Başlatıldı.")
+print("Akıllı Tehdit Algılamalı OSINT Botu Aktif.")
 bot.infinity_polling()
